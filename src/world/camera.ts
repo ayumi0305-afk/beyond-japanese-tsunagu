@@ -31,6 +31,22 @@ export class Camera {
     this.panY = Math.max(-maxY, Math.min(maxY, this.panY));
   }
 
+  /** Snap the camera onto a world point (arrival, door transitions). */
+  centerOn(
+    x: number,
+    y: number,
+    canvasW: number,
+    canvasH: number,
+    cols: number,
+    rows: number,
+  ): void {
+    const mapW = cols * TILE_SIZE * this.zoom;
+    const mapH = rows * TILE_SIZE * this.zoom;
+    this.panX = mapW / 2 - x * this.zoom;
+    this.panY = mapH / 2 - y * this.zoom;
+    this.clampPan(canvasW, canvasH, cols, rows);
+  }
+
   /** Gently keep `me` in view when the room is bigger than the screen. */
   follow(
     meX: number,

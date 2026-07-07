@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { JournalPanel } from './ui/JournalPanel';
 import { WorldCanvas } from './ui/WorldCanvas';
 import type { Seat } from './world/scene';
 import type { World } from './world/world';
@@ -32,6 +33,7 @@ export default function App() {
   const [finishedMinutes, setFinishedMinutes] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
+  const [journalOpen, setJournalOpen] = useState(false);
 
   // arrival greeting fades away on its own
   useEffect(() => {
@@ -70,6 +72,9 @@ export default function App() {
       setFinishedMinutes(minutes);
     },
     onToast: (text: string) => setToast(text),
+    onOpenPanel: (kind: 'journal') => {
+      if (kind === 'journal') setJournalOpen(true);
+    },
   };
 
   const confirmCheckIn = useCallback(() => {
@@ -95,9 +100,10 @@ export default function App() {
       {/* arrival greeting */}
       {showGreeting && (
         <div className="greeting" onClick={() => setShowGreeting(false)}>
-          <div className="greeting-jp">おかえりなさい</div>
+          <div className="greeting-jp">TSUNAGUへ ようこそ</div>
           <div className="greeting-sub">
-            {greetingForHourJST()}。自習室へようこそ — すきな せきを タップしてください
+            {greetingForHourJST()}。ここが あなたの キャンパスです — あるいて、たてものに
+            はいってみてください
           </div>
         </div>
       )}
@@ -174,6 +180,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {journalOpen && <JournalPanel onClose={() => setJournalOpen(false)} />}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

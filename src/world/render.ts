@@ -95,7 +95,7 @@ export function renderWorld(
     drawables.push({ zY: f.zY, draw: (c) => c.drawImage(img, fx, fy) });
   }
 
-  for (const p of world.people.values()) {
+  for (const p of world.peopleHere()) {
     const sprite = personSprite(p);
     const img = raster(sprite, zoom);
     const sit = p.state === PersonState.SIT ? SIT_OFFSET : 0;
@@ -117,7 +117,7 @@ export function renderWorld(
     });
   }
 
-  {
+  if (world.cat.sceneId === world.currentId) {
     const { sprite, flip } = catSprite(world.cat);
     const img = raster(sprite, zoom);
     const dx = Math.round(offsetX + world.cat.x * zoom - img.width / 2);
@@ -145,7 +145,9 @@ export function renderWorld(
   const cupImg = raster(CUP_SPRITE, zoom);
   for (const seat of scene.seats.values()) {
     const occupied = seat.occupant && seat.id !== 'sensei';
-    const artifact = world.artifacts.find((a) => a.seatId === seat.id && a.warmth > 0.02);
+    const artifact = world.artifacts.find(
+      (a) => a.sceneId === world.currentId && a.seatId === seat.id && a.warmth > 0.02,
+    );
     if (!occupied && !artifact) continue;
     const c = world.cupPos(seat);
     ctx.drawImage(
@@ -197,7 +199,28 @@ export function renderWorld(
   const font = (size: number) =>
     `${Math.round(size * fontScale)}px "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif`;
 
-  for (const p of world.people.values()) {
+  // world-anchored signage (building names, live occupancy)
+  for (const label of scene.layout.labels ?? []) {
+    let text = label.text;
+    if (label.kind === 'study-count') {
+      const n = world.countStudying('studyRoom');
+      if (n === 0) continue;
+      text = `${n}人が べんきょう中`;
+    }
+    if (!text) continue;
+    ctx.save();
+    ctx.font = font(label.kind === 'study-count' ? 9.5 : 11);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3 * fontScale;
+    ctx.strokeStyle = 'rgba(30, 25, 20, 0.7)';
+    ctx.strokeText(text, offsetX + label.x, offsetY + label.y);
+    ctx.fillStyle = label.kind === 'study-count' ? '#FFE9C7' : '#F6E8C8';
+    ctx.fillText(text, offsetX + label.x, offsetY + label.y);
+    ctx.restore();
+  }
+
+  for (const p of world.peopleHere()) {
     if (p.presence < 0.5) continue;
     const headX = offsetX + p.x * zoom;
     const headY = offsetY + (p.y - 28) * zoom;
@@ -269,6 +292,40 @@ export function renderWorld(
       ctx.fillRect(gx - l.r * zoom, gy - l.r * zoom, l.r * zoom * 2, l.r * zoom * 2);
     }
     ctx.restore();
+  }
+
+  // ── outdoor atmosphere: mist at the world's edge, fireflies at dusk ──
+  if (scene.layout.outdoor) {
+    const mistH = 90 * zoom;
+    const grad = ctx.createLinearGradient(0, offsetY - 20 * zoom, 0, offsetY + mistH);
+    grad.addColorStop(0, 'rgba(62, 74, 82, 0.95)');
+    grad.addColorStop(1, 'rgba(62, 74, 82, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvasW, offsetY + mistH);
+
+    if (light.lamps) {
+      // summer fireflies over the grass and pond, stateless drift
+      ctx.save();
+      const mapW = scene.layout.cols * TILE_SIZE;
+      for (let i = 0; i < 8; i++) {
+        const baseX = 40 + ((i * 97) % (mapW - 80));
+        const baseY = 290 + ((i * 53) % 160);
+        const x = baseX + Math.sin(world.time * 0.5 + i * 1.7) * 12;
+        const y = baseY + Math.sin(world.time * 0.8 + i * 2.3) * 7;
+        ctx.globalAlpha = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(world.time * 1.6 + i * 1.3));
+        ctx.fillStyle = '#F6E27A';
+        ctx.fillRect(offsetX + x * zoom, offsetY + y * zoom, zoom * 1.5, zoom * 1.5);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ── door transition (fade out → swap scene → fade in) ──
+  if (world.transition) {
+    const k = world.transition.t / 0.4;
+    const alpha = world.transition.phase === 'out' ? Math.min(1, k) : Math.max(0, 1 - k);
+    ctx.fillStyle = `rgba(30, 33, 31, ${alpha})`;
+    ctx.fillRect(0, 0, canvasW, canvasH);
   }
 }
 

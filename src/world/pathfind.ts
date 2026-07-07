@@ -12,7 +12,7 @@ export function isWalkable(
   const cols = rows > 0 ? tileMap[0].length : 0;
   if (row < 0 || row >= rows || col < 0 || col >= cols) return false;
   const t = tileMap[row][col];
-  if (t === T.WALL || t === T.VOID) return false;
+  if (t === T.WALL || t === T.VOID || t === T.WATER) return false;
   return !blocked.has(`${col},${row}`);
 }
 

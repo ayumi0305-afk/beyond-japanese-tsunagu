@@ -1,6 +1,7 @@
 /**
- * The world orchestrator: owns the scene, the people, the ambient life,
- * and the daily ritual (check in → study → stand up).
+ * The world orchestrator: one living campus of scenes.
+ * The campus is the home; buildings are the navigation. Walking through a
+ * door fades you into that building's scene — never a page change.
  * Lives entirely outside React; React chrome talks to it through a small
  * API + event callbacks. In phase 2 the same mutation API will be driven
  * by server presence events instead of the local sim.
@@ -9,7 +10,15 @@ import { createCat, updateCat, updateSteam, type Cat } from './ambient';
 import { createPerson, setPath, standUp, updatePerson, type PersonUpdateCtx } from './people';
 import { findPath, isWalkable } from './pathfind';
 import { Scene, type Seat } from './scene';
-import type { Layout, Palette, Person, SeatArtifact, StampBurst, SteamPuff } from './types';
+import type {
+  Layout,
+  Palette,
+  Person,
+  Portal,
+  SeatArtifact,
+  StampBurst,
+  SteamPuff,
+} from './types';
 import { Direction, PersonState, TILE_SIZE } from './types';
 
 export interface WorldEvents {
@@ -18,6 +27,8 @@ export interface WorldEvents {
   onSessionStart: () => void;
   onSessionEnd: (minutes: number) => void;
   onToast: (text: string) => void;
+  /** An interactable opened (journal wall → postcard panel). */
+  onOpenPanel: (kind: 'journal') => void;
 }
 
 export interface Session {
@@ -33,6 +44,14 @@ export interface SimEvent {
   run: (world: World) => void;
 }
 
+interface Transition {
+  phase: 'out' | 'in';
+  t: number;
+  portal: Portal;
+}
+
+const TRANSITION_SEC = 0.4;
+
 export const PALETTES: Record<string, Palette> = {
   me: { hair: '#3B332C', skin: '#E8C39E', cloth: '#4E6E8C', clothDark: '#3D5871' },
   yuki: { hair: '#2E2A25', skin: '#F0CCA8', cloth: '#8A5A72', clothDark: '#6E4759' },
@@ -42,28 +61,68 @@ export const PALETTES: Record<string, Palette> = {
 };
 
 export class World {
-  scene: Scene;
+  scenes = new Map<string, Scene>();
+  currentId: string;
   people = new Map<string, Person>();
   me: Person;
-  cat: Cat;
+  cat: Cat & { sceneId: string };
   steam: SteamPuff[] = [];
-  artifacts: SeatArtifact[] = [];
+  artifacts: Array<SeatArtifact & { sceneId: string }> = [];
   stamps: StampBurst[] = [];
   session: Session = { active: false, intention: '', goalMin: 15, startedAt: 0 };
   /** World clock in seconds since load. */
   time = 0;
   events: WorldEvents;
+  transition: Transition | null = null;
   private sim: SimEvent[] = [];
   private stampedThisSession = new Set<string>();
   /** Seat the check-in sheet is currently open for. */
   pendingSeatId: string | null = null;
+  /** Interactable that should open when `me` reaches its walkTo tile. */
+  private pendingInteract: string | null = null;
+  /** Suppresses repeated locked-door messages while standing on the tile. */
+  private lastLockedKey: string | null = null;
 
-  constructor(layout: Layout, events: WorldEvents) {
-    this.scene = new Scene(layout);
+  constructor(
+    layouts: Record<string, Layout>,
+    startScene: string,
+    catHome: { sceneId: string; col: number; row: number },
+    events: WorldEvents,
+  ) {
+    for (const [id, layout] of Object.entries(layouts)) {
+      this.scenes.set(id, new Scene(layout));
+    }
+    this.currentId = startScene;
     this.events = events;
-    this.me = createPerson('me', 'あなた', 'me', PALETTES.me, layout.entry.col, layout.entry.row);
+    const entry = this.scene.layout.entry;
+    this.me = createPerson('me', 'あなた', startScene, 'me', PALETTES.me, entry.col, entry.row);
     this.people.set(this.me.id, this.me);
-    this.cat = createCat(layout.entry.col + 1, layout.entry.row - 1);
+    this.cat = Object.assign(createCat(catHome.col, catHome.row), { sceneId: catHome.sceneId });
+  }
+
+  /** The scene the player is currently in. */
+  get scene(): Scene {
+    return this.scenes.get(this.currentId)!;
+  }
+
+  sceneOf(p: Person): Scene {
+    return this.scenes.get(p.sceneId)!;
+  }
+
+  /** People standing in the player's current scene. */
+  peopleHere(): Person[] {
+    const out: Person[] = [];
+    for (const p of this.people.values()) if (p.sceneId === this.currentId) out.push(p);
+    return out;
+  }
+
+  /** Seated students in a scene (the "N人が べんきょう中" label on campus). */
+  countStudying(sceneId: string): number {
+    let n = 0;
+    for (const p of this.people.values()) {
+      if (p.sceneId === sceneId && p.state === PersonState.SIT && p.kind !== 'sensei') n++;
+    }
+    return n;
   }
 
   // ── Sim scripting (phase 2: replaced by server events) ────────
@@ -74,10 +133,18 @@ export class World {
   }
 
   /** Spawn a classmate already seated (present before you arrived). */
-  spawnSeated(id: string, name: string, palette: Palette, seatId: string, intention: string): void {
-    const seat = this.scene.seats.get(seatId);
-    if (!seat || seat.occupant) return;
-    const p = createPerson(id, name, 'classmate', palette, seat.col, seat.row);
+  spawnSeated(
+    sceneId: string,
+    id: string,
+    name: string,
+    palette: Palette,
+    seatId: string,
+    intention: string,
+  ): void {
+    const scene = this.scenes.get(sceneId);
+    const seat = scene?.seats.get(seatId);
+    if (!scene || !seat || seat.occupant) return;
+    const p = createPerson(id, name, sceneId, 'classmate', palette, seat.col, seat.row);
     p.state = PersonState.SIT;
     p.dir = seat.facing;
     p.seatId = seatId;
@@ -87,36 +154,66 @@ export class World {
     this.people.set(id, p);
   }
 
-  /** A classmate arrives through the door and walks to a seat. */
-  arrive(id: string, name: string, palette: Palette, seatId: string, intention: string): void {
-    const seat = this.scene.seats.get(seatId);
-    if (!seat || seat.occupant) return;
-    const entry = this.scene.layout.entry;
-    const p = createPerson(id, name, 'classmate', palette, entry.col, entry.row);
+  /** A classmate arrives through the scene's door and walks to a seat. */
+  arrive(
+    sceneId: string,
+    id: string,
+    name: string,
+    palette: Palette,
+    seatId: string,
+    intention: string,
+  ): void {
+    const scene = this.scenes.get(sceneId);
+    const seat = scene?.seats.get(seatId);
+    if (!scene || !seat || seat.occupant) return;
+    const entry = scene.layout.entry;
+    const p = createPerson(id, name, sceneId, 'classmate', palette, entry.col, entry.row);
     p.intention = intention;
     p.targetSeatId = seatId;
     this.people.set(id, p);
-    const path = findPath(entry.col, entry.row, seat.col, seat.row, this.scene.tileMap, this.blockedFor(p));
+    const path = findPath(entry.col, entry.row, seat.col, seat.row, scene.tileMap, this.blockedFor(p));
     if (path.length > 0) setPath(p, path);
+  }
+
+  /** A classmate who is simply out and about in a scene (no seat, just strolling). */
+  arriveStroller(
+    sceneId: string,
+    id: string,
+    name: string,
+    palette: Palette,
+    col: number,
+    row: number,
+  ): void {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) return;
+    const p = createPerson(id, name, sceneId, 'classmate', palette, col, row);
+    p.presence = 1;
+    this.people.set(id, p);
   }
 
   /** A classmate finishes: stands, leaves a warm cup, walks out, fades. */
   depart(id: string, minutesLabel: string): void {
     const p = this.people.get(id);
     if (!p || p.kind !== 'classmate') return;
+    const scene = this.sceneOf(p);
     if (p.seatId) {
-      this.artifacts.push({ seatId: p.seatId, label: `${p.name} · ${minutesLabel}`, warmth: 1 });
-      standUp(p, this.scene);
+      this.artifacts.push({
+        sceneId: p.sceneId,
+        seatId: p.seatId,
+        label: `${p.name} · ${minutesLabel}`,
+        warmth: 1,
+      });
+      standUp(p, scene);
     }
     p.intention = null;
     p.leaving = true;
-    const entry = this.scene.layout.entry;
-    const path = findPath(p.tileCol, p.tileRow, entry.col, entry.row, this.scene.tileMap, this.blockedFor(p));
+    const entry = scene.layout.entry;
+    const path = findPath(p.tileCol, p.tileRow, entry.col, entry.row, scene.tileMap, this.blockedFor(p));
     if (path.length > 0) setPath(p, path);
   }
 
-  spawnSensei(col: number, row: number): void {
-    const s = createPerson('sensei', 'あゆみ先生', 'sensei', PALETTES.sensei, col, row);
+  spawnSensei(sceneId: string, col: number, row: number): void {
+    const s = createPerson('sensei', 'あゆみ先生', sceneId, 'sensei', PALETTES.sensei, col, row);
     s.state = PersonState.SIT;
     s.dir = Direction.DOWN;
     s.presence = 1;
@@ -131,35 +228,36 @@ export class World {
   }
 
   /** Pre-existing trace: someone studied here earlier today. */
-  addArtifact(seatId: string, label: string, warmth = 0.7): void {
-    this.artifacts.push({ seatId, label, warmth });
+  addArtifact(sceneId: string, seatId: string, label: string, warmth = 0.7): void {
+    this.artifacts.push({ sceneId, seatId, label, warmth });
   }
 
   // ── The ritual ────────────────────────────────────────────────
 
   /** Confirmed from the check-in sheet: walk to the seat and sit. */
   checkIn(seatId: string, intention: string, goalMin: number): boolean {
-    const seat = this.scene.seats.get(seatId);
+    const scene = this.scene;
+    const seat = scene.seats.get(seatId);
     if (!seat || seat.occupant) return false;
     this.pendingSeatId = null;
     this.session.intention = intention;
     this.session.goalMin = goalMin;
     this.me.intention = intention;
     this.me.targetSeatId = seatId;
-    // remove any cooled artifact occupying this seat
-    this.artifacts = this.artifacts.filter((a) => a.seatId !== seatId);
+    this.artifacts = this.artifacts.filter(
+      (a) => !(a.sceneId === this.currentId && a.seatId === seatId),
+    );
     const path = findPath(
       this.me.tileCol,
       this.me.tileRow,
       seat.col,
       seat.row,
-      this.scene.tileMap,
+      scene.tileMap,
       this.blockedFor(this.me),
     );
     if (path.length > 0) {
       setPath(this.me, path);
     } else if (this.me.tileCol === seat.col && this.me.tileRow === seat.row) {
-      // already standing on the seat tile
       this.me.state = PersonState.SIT;
       this.me.dir = seat.facing;
       this.me.seatId = seatId;
@@ -185,9 +283,14 @@ export class World {
     if (!this.session.active) return;
     const minutes = Math.max(1, Math.round((this.time - this.session.startedAt) / 60));
     if (this.me.seatId) {
-      this.artifacts.push({ seatId: this.me.seatId, label: `あなた · ${minutes}分`, warmth: 1 });
+      this.artifacts.push({
+        sceneId: this.me.sceneId,
+        seatId: this.me.seatId,
+        label: `あなた · ${minutes}分`,
+        warmth: 1,
+      });
     }
-    standUp(this.me, this.scene);
+    standUp(this.me, this.sceneOf(this.me));
     this.me.intention = null;
     this.session.active = false;
     this.say('sensei', 'お疲れさまでした', 5);
@@ -201,8 +304,21 @@ export class World {
   // ── Interaction (tap) ─────────────────────────────────────────
 
   tapAt(worldX: number, worldY: number): void {
-    // 1. people (front-most first)
-    const people = [...this.people.values()].sort((a, b) => b.y - a.y);
+    if (this.transition) return;
+    const scene = this.scene;
+    const col = Math.floor(worldX / TILE_SIZE);
+    const row = Math.floor(worldY / TILE_SIZE);
+
+    // 1. interactables (the journal wall)
+    for (const it of scene.layout.interactables ?? []) {
+      if (col >= it.col && col < it.col + it.w && row >= it.row && row < it.row + it.h) {
+        this.walkThenInteract(it.id, it.walkTo);
+        return;
+      }
+    }
+
+    // 2. people (front-most first)
+    const people = this.peopleHere().sort((a, b) => b.y - a.y);
     for (const p of people) {
       const half = 9;
       const top = p.y - 26;
@@ -212,11 +328,8 @@ export class World {
       }
     }
 
-    const col = Math.floor(worldX / TILE_SIZE);
-    const row = Math.floor(worldY / TILE_SIZE);
-
-    // 2. seats
-    const seat = this.scene.seatAt(col, row);
+    // 3. seats
+    const seat = scene.seatAt(col, row);
     if (seat && seat.id !== 'sensei') {
       if (this.me.seatId === seat.id) {
         this.finishSession();
@@ -229,20 +342,41 @@ export class World {
       }
     }
 
-    // 3. walk there (only when not mid-session)
+    // 4. walk there (only when not mid-session)
     if (this.session.active) return;
-    if (isWalkable(col, row, this.scene.tileMap, this.blockedFor(this.me))) {
+    this.pendingInteract = null;
+    const blocked = this.blockedFor(this.me, { col, row });
+    if (isWalkable(col, row, scene.tileMap, blocked)) {
       this.me.targetSeatId = null;
-      const path = findPath(
-        this.me.tileCol,
-        this.me.tileRow,
-        col,
-        row,
-        this.scene.tileMap,
-        this.blockedFor(this.me),
-      );
+      const path = findPath(this.me.tileCol, this.me.tileRow, col, row, scene.tileMap, blocked);
       if (path.length > 0) setPath(this.me, path);
     }
+  }
+
+  private walkThenInteract(id: string, walkTo: { col: number; row: number }): void {
+    if (this.session.active) return;
+    if (this.me.tileCol === walkTo.col && this.me.tileRow === walkTo.row) {
+      this.openInteract(id);
+      return;
+    }
+    const path = findPath(
+      this.me.tileCol,
+      this.me.tileRow,
+      walkTo.col,
+      walkTo.row,
+      this.scene.tileMap,
+      this.blockedFor(this.me),
+    );
+    if (path.length > 0) {
+      this.pendingInteract = id;
+      this.me.targetSeatId = null;
+      setPath(this.me, path);
+    }
+  }
+
+  private openInteract(id: string): void {
+    const it = (this.scene.layout.interactables ?? []).find((x) => x.id === id);
+    if (it) this.events.onOpenPanel(it.kind);
   }
 
   private tapPerson(p: Person): void {
@@ -254,7 +388,6 @@ export class World {
       this.say('sensei', 'いらっしゃい。ゆっくりどうぞ', 4);
       return;
     }
-    // quiet encouragement — one sakura per classmate per visit
     if (this.stampedThisSession.has(p.id)) {
       this.events.onToast(`${p.name}さんには もう🌸を送りました`);
       return;
@@ -266,10 +399,20 @@ export class World {
 
   // ── Update ────────────────────────────────────────────────────
 
-  private blockedFor(p: Person): Set<string> {
-    const blocked = new Set(this.scene.blocked);
-    for (const seat of this.scene.seats.values()) {
+  /**
+   * Blocked tiles for a person's pathfinding: static blocks, other people's
+   * seats, and door tiles — a doorway is never a shortcut; it's only enterable
+   * when it is the walk's destination (`allowTile`).
+   */
+  private blockedFor(p: Person, allowTile?: { col: number; row: number }): Set<string> {
+    const scene = this.sceneOf(p);
+    const blocked = new Set(scene.blocked);
+    for (const seat of scene.seats.values()) {
       if (seat.occupant && seat.occupant !== p.id) blocked.add(`${seat.col},${seat.row}`);
+    }
+    for (const portal of scene.layout.portals ?? []) {
+      if (allowTile && portal.col === allowTile.col && portal.row === allowTile.row) continue;
+      blocked.add(`${portal.col},${portal.row}`);
     }
     return blocked;
   }
@@ -277,32 +420,84 @@ export class World {
   update(dt: number): void {
     this.time += dt;
 
+    // door transitions
+    if (this.transition) {
+      this.transition.t += dt;
+      if (this.transition.t >= TRANSITION_SEC) {
+        if (this.transition.phase === 'out') {
+          const portal = this.transition.portal;
+          this.currentId = portal.to;
+          this.me.sceneId = portal.to;
+          this.me.tileCol = portal.spawn.col;
+          this.me.tileRow = portal.spawn.row;
+          this.me.x = portal.spawn.col * TILE_SIZE + TILE_SIZE / 2;
+          this.me.y = portal.spawn.row * TILE_SIZE + TILE_SIZE;
+          this.me.path = [];
+          this.me.moveProgress = 0;
+          this.me.state = PersonState.IDLE;
+          this.me.dir = Direction.DOWN;
+          this.transition = { phase: 'in', t: 0, portal };
+        } else {
+          this.transition = null;
+        }
+      }
+    }
+
     // scripted community events
     while (this.sim.length > 0 && this.sim[0].at <= this.time) {
       const ev = this.sim.shift()!;
       ev.run(this);
     }
 
-    const ctx: PersonUpdateCtx = {
-      scene: this.scene,
-      tileMap: this.scene.tileMap,
-      blockedFor: (p) => this.blockedFor(p),
-      mayWander: (p) => p.kind === 'classmate' && !p.leaving,
-      onSeated: (p) => {
-        if (p.id === this.me.id) this.startSession();
+    const ctx = (p: Person): PersonUpdateCtx => ({
+      scene: this.sceneOf(p),
+      tileMap: this.sceneOf(p).tileMap,
+      blockedFor: (q) => this.blockedFor(q),
+      mayWander: (q) => q.kind === 'classmate' && !q.leaving,
+      onSeated: (q) => {
+        if (q.id === this.me.id) this.startSession();
       },
-    };
+    });
 
     const toRemove: string[] = [];
     for (const p of this.people.values()) {
-      updatePerson(p, dt, ctx);
+      updatePerson(p, dt, ctx(p));
       if (p.leaving && p.presence <= 0 && p.path.length === 0) toRemove.push(p.id);
     }
     for (const id of toRemove) this.people.delete(id);
 
-    updateCat(this.cat, dt, this.scene, this.scene.tileMap);
+    // arriving at an interactable opens it
+    if (
+      this.pendingInteract &&
+      this.me.path.length === 0 &&
+      this.me.state !== PersonState.WALK
+    ) {
+      const id = this.pendingInteract;
+      this.pendingInteract = null;
+      this.openInteract(id);
+    }
 
-    // steam rises from every warm cup: occupied seats + fresh artifacts
+    // door tiles: step on one → walk into the building
+    if (!this.transition) {
+      const portal = (this.scene.layout.portals ?? []).find(
+        (pt) => pt.col === this.me.tileCol && pt.row === this.me.tileRow,
+      );
+      const key = portal ? `${this.currentId}:${portal.col},${portal.row}` : null;
+      if (portal && portal.lockedMessage) {
+        if (this.lastLockedKey !== key) {
+          this.lastLockedKey = key;
+          this.events.onToast(portal.lockedMessage);
+        }
+      } else if (portal && this.me.moveProgress === 0) {
+        this.transition = { phase: 'out', t: 0, portal };
+      }
+      if (!portal) this.lastLockedKey = null;
+    }
+
+    const catScene = this.scenes.get(this.cat.sceneId)!;
+    updateCat(this.cat, dt, catScene, catScene.tileMap);
+
+    // steam rises from every warm cup in the player's scene
     const sources: Array<{ x: number; y: number; strength: number }> = [];
     for (const seat of this.scene.seats.values()) {
       if (seat.occupant && seat.id !== 'sensei') {
@@ -312,6 +507,7 @@ export class World {
     }
     for (const a of this.artifacts) {
       a.warmth = Math.max(0, a.warmth - dt / 600); // cools over ~10 min
+      if (a.sceneId !== this.currentId) continue;
       const seat = this.scene.seats.get(a.seatId);
       if (seat && a.warmth > 0.05) {
         const c = this.cupPos(seat);

@@ -1,6 +1,8 @@
 /** Hosts the canvas world. React renders this once; everything inside is imperative. */
 import { useEffect, useRef } from 'react';
 
+import { CAMPUS, CAT_HOME } from '../data/campus';
+import { CAFE } from '../data/cafe';
 import { communityScript, seedCommunity } from '../data/community';
 import { STUDY_ROOM } from '../data/studyRoom';
 import { getDayLight } from '../world/ambient';
@@ -26,18 +28,25 @@ export function WorldCanvas({ events, onWorld }: Props) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const world = new World(STUDY_ROOM, {
-      onSeatTapped: (seat) => eventsRef.current.onSeatTapped(seat),
-      onSessionStart: () => eventsRef.current.onSessionStart(),
-      onSessionEnd: (m) => eventsRef.current.onSessionEnd(m),
-      onToast: (t) => eventsRef.current.onToast(t),
-    });
+    const world = new World(
+      { campus: CAMPUS, studyRoom: STUDY_ROOM, cafe: CAFE },
+      'campus',
+      CAT_HOME,
+      {
+        onSeatTapped: (seat) => eventsRef.current.onSeatTapped(seat),
+        onSessionStart: () => eventsRef.current.onSessionStart(),
+        onSessionEnd: (m) => eventsRef.current.onSessionEnd(m),
+        onToast: (t) => eventsRef.current.onToast(t),
+        onOpenPanel: (kind) => eventsRef.current.onOpenPanel(kind),
+      },
+    );
     seedCommunity(world);
     world.addSimEvents(communityScript());
     onWorld(world);
 
     const camera = new Camera();
     let fitted = false;
+    let fittedScene = world.currentId;
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
@@ -47,6 +56,15 @@ export function WorldCanvas({ events, onWorld }: Props) {
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
       camera.fit(canvas.width, canvas.height, world.scene.layout.cols, world.scene.layout.rows);
+      camera.centerOn(
+        world.me.x,
+        world.me.y,
+        canvas.width,
+        canvas.height,
+        world.scene.layout.cols,
+        world.scene.layout.rows,
+      );
+      fittedScene = world.currentId;
       fitted = true;
     };
     resize();
@@ -73,6 +91,19 @@ export function WorldCanvas({ events, onWorld }: Props) {
         if (lightTimer > 30) {
           lightTimer = 0;
           light = getDayLight();
+        }
+        // walking through a door refits the camera to the new room
+        if (fitted && world.currentId !== fittedScene) {
+          camera.fit(canvas.width, canvas.height, world.scene.layout.cols, world.scene.layout.rows);
+          camera.centerOn(
+            world.me.x,
+            world.me.y,
+            canvas.width,
+            canvas.height,
+            world.scene.layout.cols,
+            world.scene.layout.rows,
+          );
+          fittedScene = world.currentId;
         }
         if (fitted) {
           camera.follow(

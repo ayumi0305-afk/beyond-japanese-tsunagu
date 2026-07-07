@@ -25,6 +25,7 @@ function dirBetween(fc: number, fr: number, tc: number, tr: number): Direction {
 export function createPerson(
   id: string,
   name: string,
+  sceneId: string,
   kind: Person['kind'],
   palette: Palette,
   col: number,
@@ -34,6 +35,7 @@ export function createPerson(
   return {
     id,
     name,
+    sceneId,
     kind,
     palette,
     state: PersonState.IDLE,

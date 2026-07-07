@@ -59,8 +59,7 @@ export const STUDY_ROOM: Layout = {
     { type: 'cushion_shu', col: 12, row: 11 },
     { type: 'cushion_indigo', col: 6, row: 9 },
     { type: 'cushion', col: 13, row: 9 },
-    // sensei's counter, top-left, with her board on the wall
-    { type: 'counter', col: 2, row: 3 },
+    // the class board on the wall (sensei's home is the café)
     { type: 'board', col: 2, row: 1 },
     // windows on the top wall
     { type: 'window', col: 8, row: 1 },
@@ -86,14 +85,15 @@ export const STUDY_ROOM: Layout = {
     { id: 's8', col: 13, row: 9, facing: Direction.LEFT },
   ],
   entry: { col: 9, row: ROWS - 2 },
+  portals: [
+    { col: 9, row: ROWS - 1, to: 'campus', spawn: { col: 17, row: 16 } },
+    { col: 10, row: ROWS - 1, to: 'campus', spawn: { col: 18, row: 16 } },
+  ],
+  labels: [],
   lights: [
     { x: 6.5 * TILE_SIZE, y: 19.2 * TILE_SIZE, r: 42 },
     { x: 13.5 * TILE_SIZE, y: 19.2 * TILE_SIZE, r: 42 },
-    { x: 4 * TILE_SIZE, y: 3.5 * TILE_SIZE, r: 52 },
     { x: 9 * TILE_SIZE, y: 1.5 * TILE_SIZE, r: 36 },
     { x: 13 * TILE_SIZE, y: 1.5 * TILE_SIZE, r: 36 },
   ],
 };
-
-/** Where sensei sits (behind the counter). */
-export const SENSEI_SPOT = { col: 3, row: 2 };

@@ -279,6 +279,107 @@ body {
   color: var(--shu);
 }
 
+/* ── journal panel ── */
+.sheet.journal {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.journal-tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.journal-feed {
+  display: grid;
+  gap: 14px;
+}
+
+.postcard {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.postcard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.postcard-author {
+  font-weight: 700;
+  color: var(--sumi);
+  font-size: 14px;
+}
+
+.postcard-place {
+  font-size: 11.5px;
+  color: var(--sumi-soft);
+}
+
+.postcard-photo {
+  height: 72px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2e4a5b, #6e8c7b);
+  color: #f6f2e9;
+  font-size: 11px;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.pc-field {
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.pc-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--shu);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.pc-field p {
+  font-size: 13px;
+  color: var(--sumi);
+}
+
+.pc-sensei {
+  margin-top: 6px;
+  font-size: 12px;
+  background: #e5ede3;
+  border-radius: 10px;
+  padding: 7px 10px;
+  color: var(--sumi);
+}
+
+.pc-sensei b {
+  color: #56705c;
+}
+
+.journal-map svg {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  margin: 0 auto;
+}
+
+.journal-hint {
+  font-size: 12px;
+  color: var(--sumi-soft);
+  text-align: center;
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
 /* ── toast ── */
 .toast {
   position: absolute;

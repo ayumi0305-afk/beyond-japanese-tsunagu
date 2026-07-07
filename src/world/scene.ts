@@ -2,12 +2,18 @@
 import { walkableTiles } from './pathfind';
 import {
   makeBoard,
+  makeBuilding,
   makeCounter,
   makeCushion,
+  makeFlowers,
+  makeJournalWall,
   makeLantern,
+  makeMapBoard,
   makePlant,
+  makeRooftop,
   makeShelf,
   makeTable,
+  makeTree,
   makeWindow,
   C,
 } from './sprites';
@@ -28,6 +34,17 @@ const catalog: Record<string, FurnitureDef> = {
   // Wall-mounted items: no extra blocking (walls already block).
   window: { sprite: makeWindow(), footprintW: 2, footprintH: 1, walkable: true },
   board: { sprite: makeBoard(), footprintW: 3, footprintH: 1, walkable: true },
+  // Campus
+  building_study: { sprite: makeBuilding(10, 7, { doorCol: 4, big: true }), footprintW: 10, footprintH: 7 },
+  building_cafe: { sprite: makeBuilding(7, 5, { doorCol: 3 }), footprintW: 7, footprintH: 5 },
+  building_library: { sprite: makeBuilding(7, 5, { doorCol: 3 }), footprintW: 7, footprintH: 5 },
+  tree: { sprite: makeTree(false), footprintW: 1, footprintH: 1 },
+  tree_big: { sprite: makeTree(true), footprintW: 1, footprintH: 1 },
+  rooftop: { sprite: makeRooftop(), footprintW: 3, footprintH: 1, walkable: true },
+  journal_wall: { sprite: makeJournalWall(), footprintW: 6, footprintH: 2 },
+  map_board: { sprite: makeMapBoard(), footprintW: 2, footprintH: 2 },
+  flowers: { sprite: makeFlowers(), footprintW: 1, footprintH: 1, walkable: true, zBias: -8 },
+  counter_small: { sprite: makeCounter(3), footprintW: 3, footprintH: 1 },
 };
 
 export function getFurnitureDef(type: string): FurnitureDef | undefined {

@@ -8,6 +8,10 @@ export const TileType = {
   FLOOR_WOOD_ALT: 2,
   FLOOR_RUG: 3,
   FLOOR_STONE: 4,
+  WATER: 5,
+  GRASS: 6,
+  GRASS_ALT: 7,
+  PATH: 8,
   WALL: 9,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
@@ -44,6 +48,38 @@ export interface PlacedFurniture {
   row: number;
 }
 
+/** A door: stepping on this tile carries you into another scene. */
+export interface Portal {
+  col: number;
+  row: number;
+  to: string;
+  spawn: { col: number; row: number };
+  /** Locked portals don't transition — they explain themselves instead. */
+  lockedMessage?: string;
+}
+
+/** Something you walk up to and it opens (the journal wall, a notice board). */
+export interface Interactable {
+  id: string;
+  kind: 'journal';
+  /** Tap target rect in tiles. */
+  col: number;
+  row: number;
+  w: number;
+  h: number;
+  /** Where your character walks to before it opens. */
+  walkTo: { col: number; row: number };
+}
+
+/** World-anchored signage text (building names etc.). */
+export interface SceneLabel {
+  x: number;
+  y: number;
+  text: string;
+  /** 'study-count' renders live occupancy instead of static text. */
+  kind?: 'sign' | 'study-count';
+}
+
 export interface Layout {
   cols: number;
   rows: number;
@@ -51,10 +87,15 @@ export interface Layout {
   tiles: number[];
   furniture: PlacedFurniture[];
   seats: SeatDef[];
-  /** Tile where people enter the room. */
+  /** Tile where people enter the scene. */
   entry: { col: number; row: number };
   /** Lamp/lantern glow points (world px) for evening light. */
   lights: Array<{ x: number; y: number; r: number }>;
+  portals?: Portal[];
+  interactables?: Interactable[];
+  labels?: SceneLabel[];
+  /** Outdoor scenes get sky mist at the edges and fireflies at dusk. */
+  outdoor?: boolean;
 }
 
 export interface FurnitureDef {
@@ -79,6 +120,8 @@ export interface Palette {
 export interface Person {
   id: string;
   name: string;
+  /** Which scene this person is currently in. */
+  sceneId: string;
   kind: 'me' | 'classmate' | 'sensei';
   palette: Palette;
   state: PersonState;

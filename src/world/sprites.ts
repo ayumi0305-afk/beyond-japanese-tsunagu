@@ -37,6 +37,20 @@ function flipH(g: SpriteData): SpriteData {
 // ── Brand-derived world palette ─────────────────────────────────
 
 export const C = {
+  grass: '#7BA05B',
+  grassDark: '#6B9150',
+  path: '#D3BE93',
+  pathDark: '#C6AF82',
+  water: '#6FA3B5',
+  waterLight: '#7FB3C4',
+  roofIndigo: '#22414B',
+  roofIndigoLight: '#2E4E5C',
+  buildingWall: '#A9825C',
+  buildingWallDark: '#8A6748',
+  doorGlow: '#F2C069',
+  treeGreen: '#5F8248',
+  treeGreenLight: '#6F9553',
+  trunk: '#6B4F36',
   woodFloor: '#C9A87C',
   woodFloorDark: '#BE9C6F',
   woodFloorLine: '#B5946A',
@@ -115,15 +129,187 @@ function tileWallTop(): SpriteData {
   return g;
 }
 
+function tileGrass(alt: boolean): SpriteData {
+  const g = blank(16, 16);
+  rect(g, 0, 0, 16, 16, alt ? C.grassDark : C.grass);
+  // little blades
+  px(g, 3, 4, alt ? C.grass : C.grassDark);
+  px(g, 11, 9, alt ? C.grass : C.grassDark);
+  px(g, 6, 13, alt ? C.grass : C.grassDark);
+  px(g, 13, 2, alt ? C.grass : C.grassDark);
+  return g;
+}
+
+function tilePath(): SpriteData {
+  const g = blank(16, 16);
+  rect(g, 0, 0, 16, 16, C.path);
+  px(g, 4, 5, C.pathDark);
+  px(g, 12, 10, C.pathDark);
+  px(g, 8, 14, C.pathDark);
+  rect(g, 0, 8, 16, 1, C.pathDark);
+  return g;
+}
+
+function tileWater(): SpriteData {
+  const g = blank(16, 16);
+  rect(g, 0, 0, 16, 16, C.water);
+  rect(g, 2, 4, 5, 1, C.waterLight);
+  rect(g, 9, 10, 5, 1, C.waterLight);
+  rect(g, 5, 13, 4, 1, C.waterLight);
+  return g;
+}
+
 export const TILE_SPRITES: Record<number, SpriteData> = {
   1: tileWood(false),
   2: tileWood(true),
   3: tileRug(),
   4: tileStone(),
+  5: tileWater(),
+  6: tileGrass(false),
+  7: tileGrass(true),
+  8: tilePath(),
   9: tileWallFace(),
 };
 
 export const WALL_TOP_SPRITE: SpriteData = tileWallTop();
+
+// ── Campus structures ───────────────────────────────────────────
+
+/** A campus building seen from the front: roof, wall, lit windows, dark door with warm light. */
+export function makeBuilding(
+  wTiles: number,
+  hTiles: number,
+  opts: { doorCol: number; big?: boolean },
+): SpriteData {
+  const w = wTiles * 16;
+  const h = hTiles * 16;
+  const g = blank(w, h);
+  const roofH = Math.floor(h * 0.42);
+
+  // walls
+  rect(g, 2, roofH, w - 4, h - roofH, C.buildingWall);
+  rect(g, 2, h - 4, w - 4, 4, C.buildingWallDark);
+  // roof with slight overhang and ridge
+  rect(g, 0, 6, w, roofH - 6, C.roofIndigo);
+  rect(g, 2, 0, w - 4, 8, C.roofIndigoLight);
+  rect(g, 0, roofH - 2, w, 3, '#1C333C');
+  // roof texture lines
+  for (let x = 6; x < w - 6; x += 10) rect(g, x, 9, 1, roofH - 12, C.roofIndigoLight);
+
+  // windows (lit — someone could be inside)
+  const winY = roofH + Math.floor((h - roofH) * 0.22);
+  const winCount = Math.max(2, Math.floor(wTiles / 2) - (opts.big ? 1 : 0));
+  for (let i = 0; i < winCount; i++) {
+    const wx = Math.floor(((i + 1) * w) / (winCount + 1)) - 6;
+    rect(g, wx - 1, winY - 1, 14, 12, C.windowFrame);
+    rect(g, wx, winY, 12, 10, C.doorGlow);
+    rect(g, wx + 5, winY, 2, 10, C.windowFrame);
+  }
+
+  // door: dark opening with warm spill and a noren-like short curtain
+  const doorX = opts.doorCol * 16 + 2;
+  rect(g, doorX - 2, h - 26, 16, 26, C.buildingWallDark);
+  rect(g, doorX, h - 24, 12, 24, '#2A2118');
+  rect(g, doorX + 1, h - 10, 10, 10, C.doorGlow);
+  rect(g, doorX, h - 24, 12, 6, C.cushionShu);
+  rect(g, doorX + 3, h - 19, 1, 3, C.cushionShu);
+  rect(g, doorX + 8, h - 19, 1, 3, C.cushionShu);
+
+  // wooden sign board above the door
+  rect(g, doorX - 4, h - 34, 20, 7, C.trunk);
+  rect(g, doorX - 3, h - 33, 18, 5, '#8F6F47');
+  return g;
+}
+
+/** A tree — 1-tile footprint, 2.5 tiles tall. */
+export function makeTree(big: boolean): SpriteData {
+  const g = blank(20, 40);
+  rect(g, 8, 30, 4, 10, C.trunk);
+  rect(g, 2, 8, 16, 24, C.treeGreen);
+  rect(g, 4, 4, 12, 10, C.treeGreenLight);
+  rect(g, 0, 14, 6, 10, C.treeGreenLight);
+  rect(g, 14, 12, 6, 12, C.treeGreen);
+  if (big) {
+    rect(g, 6, 0, 8, 8, C.treeGreen);
+    px(g, 3, 6, C.treeGreenLight);
+  }
+  return g;
+}
+
+/** Distant rooftop silhouettes for the misty campus edge. */
+export function makeRooftop(): SpriteData {
+  const g = blank(44, 22);
+  rect(g, 2, 10, 40, 12, '#2E4250');
+  rect(g, 0, 8, 44, 4, '#263845');
+  rect(g, 12, 0, 20, 10, '#2E4250');
+  rect(g, 10, 6, 24, 3, '#263845');
+  rect(g, 20, 14, 4, 3, '#F2C069');
+  return g;
+}
+
+/** The Japan Journal wall: a long corkboard with pinned postcards. */
+export function makeJournalWall(): SpriteData {
+  const g = blank(96, 40);
+  // posts
+  rect(g, 2, 8, 4, 32, C.trunk);
+  rect(g, 90, 8, 4, 32, C.trunk);
+  // board
+  rect(g, 0, 4, 96, 28, C.buildingWallDark);
+  rect(g, 3, 7, 90, 22, '#EFE5D0');
+  // little roof cap
+  rect(g, 0, 0, 96, 5, C.roofIndigo);
+  // postcards
+  const cardColors = ['#D2694F', '#6E8F76', '#4E6E8C', '#B08D5F', '#8A5A72'];
+  const positions = [
+    [8, 10],
+    [26, 13],
+    [44, 9],
+    [62, 12],
+    [78, 10],
+    [18, 21],
+    [54, 20],
+    [70, 21],
+  ] as const;
+  positions.forEach(([x, y], i) => {
+    rect(g, x, y, 12, 8, '#FFFDF7');
+    rect(g, x, y, 12, 1, cardColors[i % cardColors.length]);
+    px(g, x + 5, y - 1, cardColors[(i + 1) % cardColors.length]);
+  });
+  return g;
+}
+
+/** The wall map of Japan with community pins. */
+export function makeMapBoard(): SpriteData {
+  const g = blank(40, 44);
+  rect(g, 4, 40, 4, 4, C.trunk);
+  rect(g, 32, 40, 4, 4, C.trunk);
+  rect(g, 0, 0, 40, 42, C.buildingWallDark);
+  rect(g, 2, 2, 36, 38, '#FDF8EC');
+  // stylised archipelago
+  rect(g, 26, 6, 8, 5, '#8FAF74'); // hokkaido
+  rect(g, 24, 13, 6, 5, '#8FAF74');
+  rect(g, 20, 17, 7, 5, '#8FAF74');
+  rect(g, 15, 21, 7, 5, '#8FAF74'); // honshu sweep
+  rect(g, 10, 25, 7, 4, '#8FAF74');
+  rect(g, 12, 31, 5, 3, '#8FAF74'); // shikoku
+  rect(g, 5, 30, 5, 5, '#8FAF74'); // kyushu
+  // pins
+  px(g, 22, 19, '#D2694F');
+  px(g, 14, 26, '#22414B');
+  px(g, 13, 27, '#8A5A72');
+  return g;
+}
+
+/** Flower patch for path edges. */
+export function makeFlowers(): SpriteData {
+  const g = blank(14, 8);
+  px(g, 2, 4, '#CE7A62');
+  px(g, 6, 2, '#E8A8B8');
+  px(g, 10, 5, '#F2C069');
+  px(g, 4, 6, '#E8A8B8');
+  px(g, 12, 3, '#CE7A62');
+  return g;
+}
 
 // ── Furniture ───────────────────────────────────────────────────
 
