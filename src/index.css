@@ -1,0 +1,341 @@
+/* TSUNAGU chrome — kinari paper, sumi ink, shu accent. The world is the canvas; this is the whisper layer. */
+
+:root {
+  --kinari: #faf4ea;
+  --paper: #fffdf7;
+  --sumi: #2e2a25;
+  --sumi-soft: #7a7062;
+  --line: #e9dfce;
+  --shu: #d2694f;
+  --shu-dark: #b85843;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Hiragino Mincho ProN', 'Yu Mincho',
+    Georgia, serif;
+  --sans: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--sans);
+  background: #454b3e;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+.app {
+  position: relative;
+  height: 100%;
+}
+
+.world-container {
+  position: absolute;
+  inset: 0;
+}
+
+.world-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── arrival greeting ── */
+.greeting {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90%, 420px);
+  background: rgba(255, 253, 247, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 20px;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(20, 20, 15, 0.25);
+  animation: settle 0.6s ease both;
+  cursor: pointer;
+}
+
+.greeting-jp {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--sumi);
+  margin-bottom: 4px;
+}
+
+.greeting-sub {
+  font-size: 12.5px;
+  color: var(--sumi-soft);
+  line-height: 1.6;
+}
+
+/* ── session pill ── */
+.session-pill {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 253, 247, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px 8px 18px;
+  box-shadow: 0 6px 24px rgba(20, 20, 15, 0.22);
+  animation: settle 0.4s ease both;
+  max-width: 92%;
+}
+
+.session-time {
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--sumi);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-intention {
+  font-size: 12px;
+  color: var(--sumi-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+
+.stand-btn {
+  border: 1px solid var(--shu);
+  background: transparent;
+  color: var(--shu);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+.stand-btn:active {
+  background: var(--shu);
+  color: var(--paper);
+}
+
+/* ── check-in sheet ── */
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 28, 22, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadein 0.25s ease both;
+}
+
+.sheet {
+  width: min(100%, 480px);
+  background: var(--kinari);
+  border-radius: 22px 22px 0 0;
+  padding: 24px 22px calc(env(safe-area-inset-bottom, 0px) + 22px);
+  animation: rise 0.3s ease both;
+}
+
+.sheet-title {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--sumi);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.sheet-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--shu);
+  font-weight: 700;
+  margin: 14px 0 8px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--sumi-soft);
+  font-family: var(--sans);
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.chip.on {
+  border-color: var(--shu);
+  color: var(--shu);
+  background: #f6e4dc;
+  font-weight: 700;
+}
+
+.intention-input {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--sumi);
+  outline: none;
+}
+
+.intention-input:focus {
+  border-color: var(--shu);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.btn {
+  flex: 1;
+  border-radius: 999px;
+  padding: 13px 0;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn.primary {
+  background: var(--shu);
+  color: var(--paper);
+}
+
+.btn.primary:active {
+  background: var(--shu-dark);
+}
+
+.btn.quiet {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--sumi-soft);
+}
+
+/* ── お疲れさま ── */
+.otsukare {
+  position: absolute;
+  inset: 0;
+  background: rgba(250, 244, 234, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadein 0.5s ease both;
+  cursor: pointer;
+}
+
+.otsukare-card {
+  text-align: center;
+  padding: 20px;
+}
+
+.otsukare-jp {
+  font-family: var(--serif);
+  font-size: 32px;
+  color: var(--sumi);
+  margin-bottom: 14px;
+}
+
+.otsukare-sub {
+  font-size: 14px;
+  color: var(--sumi-soft);
+  margin-bottom: 26px;
+}
+
+.otsukare-mata {
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--shu);
+}
+
+/* ── toast ── */
+.toast {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(46, 42, 37, 0.92);
+  color: var(--kinari);
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 10px 20px;
+  white-space: nowrap;
+  animation: settle 0.3s ease both;
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── motion ── */
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .greeting,
+  .session-pill,
+  .sheet,
+  .sheet-backdrop,
+  .otsukare,
+  .toast {
+    animation: none;
+  }
+}
